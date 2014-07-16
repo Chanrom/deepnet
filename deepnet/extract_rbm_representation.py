@@ -56,7 +56,7 @@ def main():
   board = LockGPU()
   model_file = sys.argv[1]
   train_op_file = sys.argv[2]
-  layernames = sys.argv[3].split()
+  layernames = sys.argv[3].split(',')
   output_dir = sys.argv[4]
   datasets = ['validation', 'test', 'train']
   #datasets = ['validation', 'test']

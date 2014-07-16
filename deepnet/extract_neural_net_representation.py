@@ -5,7 +5,7 @@ import sys
 
 def ExtractRepresentations(model_file, train_op_file, layernames,
                            base_output_dir, memory = '100M', skip_outputs=True,
-                           datasets=['test'], gpu_mem='2G', main_mem='30G'):
+                           datasets=['test'], gpu_mem='2G', main_mem='30G', data_proto=None):
   if isinstance(model_file, str):
     model = util.ReadModel(model_file)
   else:
@@ -14,6 +14,8 @@ def ExtractRepresentations(model_file, train_op_file, layernames,
     op = ReadOperation(train_op_file)
   else:
     op = train_op_file
+  if data_proto:
+    op.data_proto = data_proto
   if not os.path.isdir(base_output_dir):
     os.makedirs(base_output_dir)
   op.randomize = False
@@ -48,10 +50,10 @@ def ExtractRepresentations(model_file, train_op_file, layernames,
     text_format.PrintMessage(data_pb, f)
 
 def Usage():
-  print 'python %s <model_file> <train_op_file> <output_dir> <layer name1> [layer name2 [..]]' % sys.argv[0]
+  print 'python %s <model_file> <train_op_file> <output_dir> <> <layer name1> [layer name2 [..]]' % sys.argv[0]
 
 def main():
-  if len(sys.argv) < 5:
+  if len(sys.argv) < 6:
     Usage()
     sys.exit(0)
   board = LockGPU()
@@ -59,10 +61,13 @@ def main():
   model = util.ReadModel(model_file)
   train_op_file = sys.argv[2]
   output_dir = sys.argv[3]
-  layernames = sys.argv[4:]
+  data_proto = sys.argv[4]
+  if data_proto == "None":
+    data_proto = None
+  layernames = sys.argv[5:]
   ExtractRepresentations(model_file, train_op_file, layernames, output_dir,
                          #memory='1G', datasets=['train', 'validation', 'test'])
-                         memory='1G', datasets=['validation', 'test'])
+                         memory='1G', datasets=['validation', 'test'], data_proto=data_proto)
   FreeGPU(board)
 
 
