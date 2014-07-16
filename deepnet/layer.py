@@ -11,6 +11,13 @@ class Layer(Parameter):
       tied_to.num_shares += 1
       proto = util.LoadMissing(proto, tied_to.proto)
     
+    self.rep_tied = proto.rep_tied
+    if self.rep_tied:
+      self.rep_tied_to = proto.rep_tied_to
+      self.rep_tied_lambda = proto.rep_tied_lambda
+    self.rep_tied_dist = proto.rep_tied_dist
+    self.rep_tied_layers = []
+    
     self.proto = proto
     self.state = None
     self.params = {}
@@ -55,12 +62,7 @@ class Layer(Parameter):
     if self.batchsize > 0:
       self.AllocateMemory(self.batchsize)
     
-    self.rep_tied = proto.rep_tied
-    if self.rep_tied:
-      self.rep_tied_to = proto.rep_tied_to
-      self.rep_tied_lambda = proto.rep_tied_lambda
-    self.rep_tied_dist = proto.rep_tied_dist
-    self.rep_tied_layers = []
+    
     self.loss_factor = proto.loss_factor
     
   def LoadParams(self, proto, **kwargs):

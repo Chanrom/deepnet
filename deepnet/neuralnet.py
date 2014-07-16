@@ -665,13 +665,13 @@ class NeuralNet(object):
         # Evaluate on validation set.
         self.Evaluate(validation=True, collect_predictions=collect_predictions)
         if select_model_using_restricted:
-          if self.net.hyperparams.label_type == deepnet_pb2.LabelType.ONEOFK:
+          if self.net.hyperparams.label_type == deepnet_pb2.Hyperparams.ONEOFK:
             self.CalcRestricted_OneOfK(dataset='validation')
           
         # Evaluate on test set.
         self.Evaluate(validation=False, collect_predictions=collect_predictions)
         if select_model_using_restricted:
-          if self.net.hyperparams.label_type == deepnet_pb2.LabelType.ONEOFK:
+          if self.net.hyperparams.label_type == deepnet_pb2.Hyperparams.ONEOFK:
             self.CalcRestricted_OneOfK(dataset='test')
           
         if select_best:
@@ -773,7 +773,7 @@ class NeuralNet(object):
     import fxeval
     a = fxeval.fx_calc_map_label_k(reps_img, reps_txt, reps_lab, 50, dist_method)
     b = fxeval.fx_calc_map_label_k(reps_txt, reps_img, reps_lab, 50, dist_method)
-    
+    print 
     print a,b,(a+b)/2
     if dataset == 'test':
       self.restricted_testnum = (a+b)/2
