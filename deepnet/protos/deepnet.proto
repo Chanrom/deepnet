@@ -42,6 +42,20 @@ message Layer {
   optional string tied_to = 18;
   
   optional float loss_weight = 19 [default=1.0];
+  
+  // Add by Fangxiang Feng
+  optional float loss_factor = 20 [default=1.0];
+  
+  optional bool rep_tied = 21 [default=false];
+  optional string rep_tied_to = 22;
+  optional float rep_tied_lambda = 23 [default=1.0];
+  enum Dist {
+    L2 = 0;
+    L1 = 1;
+    COS = 2;
+    KL = 3;
+  }
+  optional Dist rep_tied_dist = 24 [default=L2];
 }
 
 message Parameter {
@@ -176,6 +190,15 @@ message Hyperparams {
   optional float shared_prior_cost = 62 [default=0.0];
   optional bool soft_shared_prior = 63 [default=false];
   optional string label_freq_file = 64;
+  
+  // Add by Fangxiang Feng
+  optional bool select_model_using_restricted = 65 [default=false];
+  enum LabelType {
+    NOLABEL = 0;
+    ONEOFK = 1;
+    MULTILABEL = 2;
+  }
+  optional LabelType label_type = 66 [default=NOLABEL];
 }
 
 message Edge {
