@@ -59,7 +59,10 @@ class NeuralNet(object):
       self.verbose = self.e_op.verbose
       self.batchsize = self.e_op.batchsize
     self.train_stop_steps = sys.maxint
-
+    
+    self.restricted_validnum = 0
+    self.restricted_testnum = 0
+    
   def PrintNetwork(self):
     for layer in self.layer:
       print layer.name
@@ -85,7 +88,13 @@ class NeuralNet(object):
       if layer.tied:
         tied_to = next(l for l in self.layer if l.name == layer.tied_to)
       self.layer.append(CreateLayer(Layer, layer, self.t_op, tied_to=tied_to))
-
+    
+    for layer in self.layer:
+      if layer.rep_tied:
+        rep_tied_to_list = layer.rep_tied_to.split(',')
+        for item in rep_tied_to_list:
+          layer.rep_tied_layers += [self.GetLayerByName(item)]
+    
     for edge in self.net.edge:
       hyp = deepnet_pb2.Hyperparams()
       hyp.CopyFrom(self.net.hyperparams)
@@ -252,7 +261,12 @@ class NeuralNet(object):
     else:  # Receiving derivative for the first time.
       cm.dot(edge.params['weight'], deriv, target=layer.deriv)
       layer.dirty = True
-
+      if layer.rep_tied:
+        if layer.rep_tied_dist == deepnet_pb2.Layer.L2:
+          for rep_tied_layer in layer.rep_tied_layers:
+            layer.state.subtract(rep_tied_layer.state, target=layer.temp_state)
+            layer.deriv.add_mult(layer.temp_state, layer.rep_tied_lambda)
+      
   def UpdateEdgeParams(self, edge, deriv, step):
     """ Update the parameters associated with this edge.
 
@@ -618,7 +632,10 @@ class NeuralNet(object):
     select_model_using_error = self.net.hyperparams.select_model_using_error
     select_model_using_acc = self.net.hyperparams.select_model_using_acc
     select_model_using_map = self.net.hyperparams.select_model_using_map
-    select_best = select_model_using_error or select_model_using_acc or select_model_using_map
+    select_model_using_restricted = self.net.hyperparams.select_model_using_restricted
+    
+    select_best = select_model_using_error or select_model_using_acc or select_model_using_map or select_model_using_restricted
+    
     if select_best:
       best_valid_error = float('Inf')
       test_error = float('Inf')
@@ -647,8 +664,16 @@ class NeuralNet(object):
         stats = []
         # Evaluate on validation set.
         self.Evaluate(validation=True, collect_predictions=collect_predictions)
+        if select_model_using_restricted:
+          if self.net.hyperparams.label_type == deepnet_pb2.LabelType.ONEOFK:
+            self.CalcRestricted_OneOfK(dataset='validation')
+          
         # Evaluate on test set.
         self.Evaluate(validation=False, collect_predictions=collect_predictions)
+        if select_model_using_restricted:
+          if self.net.hyperparams.label_type == deepnet_pb2.LabelType.ONEOFK:
+            self.CalcRestricted_OneOfK(dataset='test')
+          
         if select_best:
           valid_stat = self.net.validation_stats[-1]
           if len(self.net.test_stats) > 1:
@@ -664,6 +689,9 @@ class NeuralNet(object):
           elif select_model_using_map:
             valid_error = 1 - valid_stat.MAP
             _test_error = 1 - test_stat.MAP
+          elif select_model_using_restricted:
+            valid_error = 1 - self.restricted_validnum
+            _test_error = 1 - self.restricted_testnum
           if valid_error < best_valid_error:
             best_valid_error = valid_error
             test_error = _test_error
@@ -694,3 +722,61 @@ class NeuralNet(object):
           util.WriteCheckpointFile(best_net, best_t_op, best=True)
 
       stop = self.TrainStopCondition(step)
+
+  def CalcRestricted_OneOfK(self, dataset='test', drop=False):
+    lay_img = self.GetLayerByName('image_tied_hidden')
+    lay_txt = self.GetLayerByName('text_tied_hidden')
+
+    lay_lab = self.GetLayerByName('label_layer')
+    
+    if dataset == 'train':
+      datagetter = self.GetTrainBatch
+      if self.train_data_handler is None:
+        return
+      numbatches = self.train_data_handler.num_batches
+      size = (numbatches - 1) * self.train_data_handler.batchsize
+      batch_size = self.train_data_handler.batchsize
+    elif dataset == 'validation':
+      datagetter = self.GetValidationBatch
+      if self.validation_data_handler is None:
+        return
+      numbatches = self.validation_data_handler.num_batches
+      size = (numbatches - 1) * self.validation_data_handler.batchsize
+      batch_size = self.validation_data_handler.batchsize
+    elif dataset == 'test':
+      datagetter = self.GetTestBatch
+      if self.test_data_handler is None:
+        return
+      numbatches = self.test_data_handler.num_batches
+      size = (numbatches - 1) * self.test_data_handler.batchsize
+      batch_size = self.test_data_handler.batchsize
+
+    reps_img = np.zeros((size, lay_img.dimensions))
+    reps_txt = np.zeros((size, lay_txt.dimensions))
+   
+    reps_lab = np.zeros((size))
+    for batch in range(numbatches):
+      datagetter()
+      self.ForwardPropagate(train=drop)
+      if batch < numbatches - 1:
+        s = batch * batch_size
+        reps_img[s:s+batch_size,:] = lay_img.state.asarray().T
+        reps_txt[s:s+batch_size,:] = lay_txt.state.asarray().T
+        reps_lab[s:s+batch_size] = lay_lab.data.asarray()
+      else:
+        reps_img = np.r_[reps_img, lay_img.state.asarray().T]
+        reps_txt = np.r_[reps_txt, lay_txt.state.asarray().T]
+        reps_lab = np.r_[reps_lab, lay_lab.data.asarray().reshape(-1)]
+
+    dist_method = 'COS'
+
+    import fxeval
+    a = fxeval.fx_calc_map_label_k(reps_img, reps_txt, reps_lab, 50, dist_method)
+    b = fxeval.fx_calc_map_label_k(reps_txt, reps_img, reps_lab, 50, dist_method)
+    
+    print a,b,(a+b)/2
+    if dataset == 'test':
+      self.restricted_testnum = (a+b)/2
+    elif dataset == 'validation':
+      self.restricted_validnum = (a+b)/2
+      

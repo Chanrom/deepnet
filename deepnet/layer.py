@@ -10,6 +10,7 @@ class Layer(Parameter):
     if proto.tied:
       tied_to.num_shares += 1
       proto = util.LoadMissing(proto, tied_to.proto)
+    
     self.proto = proto
     self.state = None
     self.params = {}
@@ -53,7 +54,15 @@ class Layer(Parameter):
     self.LoadParams(proto, t_op=t_op, tied_to=tied_to)
     if self.batchsize > 0:
       self.AllocateMemory(self.batchsize)
-
+    
+    self.rep_tied = proto.rep_tied
+    if self.rep_tied:
+      self.rep_tied_to = proto.rep_tied_to
+      self.rep_tied_lambda = proto.rep_tied_lambda
+    self.rep_tied_dist = proto.rep_tied_dist
+    self.rep_tied_layers = []
+    self.loss_factor = proto.loss_factor
+    
   def LoadParams(self, proto, **kwargs):
     assert proto
     for param in proto.param:
@@ -181,6 +190,11 @@ class Layer(Parameter):
     self.batchsize_temp = cm.CUDAMatrix(np.zeros((1, batchsize)))
     self.state = cm.CUDAMatrix(np.zeros((numdims, batchsize)))
     self.deriv = cm.CUDAMatrix(np.zeros((numdims, batchsize)))
+    
+    if self.rep_tied:
+      self.temp_state = cm.CUDAMatrix(np.zeros((numdims, batchsize)))
+      self.batchsize_len = cm.CUDAMatrix(np.zeros((1, batchsize)))
+    
     if self.t_op:
       if self.t_op.optimizer == deepnet_pb2.Operation.PCD:
         self.pos_state = self.state

@@ -44,7 +44,8 @@ class LogisticLayer(Layer):
 
       if get_deriv:
         self.state.subtract(self.data, target=self.deriv)
-
+        self.deriv.mult(self.loss_factor)
+        
     elif self.loss_function == deepnet_pb2.Layer.SQUARED_LOSS:
       target = self.statesize
       self.state.subtract(self.data, target=target)
@@ -55,6 +56,7 @@ class LogisticLayer(Layer):
       else:
         self.deriv.assign(target)
       if get_deriv:
+        self.deriv.mult(self.loss_factor)
         self.ComputeDeriv()
     else:
       raise Exception('Unknown loss function for logistic units.')
