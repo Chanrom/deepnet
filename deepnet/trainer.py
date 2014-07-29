@@ -8,22 +8,22 @@ import numpy as np
 from time import sleep
 
 def LockGPU(max_retries=10):
-  # for retry_count in range(max_retries):
-    # board = gpu_lock.obtain_lock_id()
-    # if board != -1:
-      # break
-    # sleep(1)
-  # if board == -1:
-    # print 'No GPU board available.'
-    # sys.exit(1)
-  # else:
-    # cm.cuda_set_device(board)
-    # cm.cublas_init()
-  # return board
-  board = 2
-  cm.cuda_set_device(board)
-  cm.cublas_init()
+  for retry_count in range(max_retries):
+    board = gpu_lock.obtain_lock_id()
+    if board != -1:
+      break
+    sleep(1)
+  if board == -1:
+    print 'No GPU board available.'
+    sys.exit(1)
+  else:
+    cm.cuda_set_device(board)
+    cm.cublas_init()
   return board
+  # board = 2
+  # cm.cuda_set_device(board)
+  # cm.cublas_init()
+  # return board
 
 def FreeGPU(board):
   cm.cublas_shutdown()
