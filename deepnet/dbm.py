@@ -513,3 +513,72 @@ class DBM(NeuralNet):
         print 'Unclamping %s' % layername
         l.is_input = False
         self.unclamped_layer.append(l.name)
+  
+  def CalcRestricted(self, dataset='test', drop=False):
+    lay_img = self.GetLayerByName('image_tied_hidden')
+    lay_txt = self.GetLayerByName('text_tied_hidden')
+
+    lay_lab = self.GetLayerByName('label_layer')
+    
+    if dataset == 'train':
+      datagetter = self.GetTrainBatch
+      if self.train_data_handler is None:
+        return
+      numbatches = self.train_data_handler.num_batches
+      size = numbatches * self.train_data_handler.batchsize
+      batch_size = self.train_data_handler.batchsize
+    elif dataset == 'validation':
+      datagetter = self.GetValidationBatch
+      if self.validation_data_handler is None:
+        return
+      numbatches = self.validation_data_handler.num_batches
+      size = numbatches * self.validation_data_handler.batchsize
+      batch_size = self.validation_data_handler.batchsize
+    elif dataset == 'test':
+      datagetter = self.GetTestBatch
+      if self.test_data_handler is None:
+        return
+      numbatches = self.test_data_handler.num_batches
+      size = numbatches * self.test_data_handler.batchsize
+      batch_size = self.test_data_handler.batchsize
+
+    reps_img = np.zeros((size, lay_img.dimensions))
+    reps_txt = np.zeros((size, lay_txt.dimensions))
+    
+    reps_lab = np.zeros((size, lay_lab.dimensions))
+    for batch in range(numbatches):
+      datagetter()
+      self.PositivePhase(train=False, evaluate=True)
+      s = batch * batch_size
+      reps_img[s:s+batch_size,:] = lay_img.state.asarray().T
+      reps_txt[s:s+batch_size,:] = lay_txt.state.asarray().T
+      reps_lab[s:s+batch_size,:] = lay_lab.data.asarray().T
+      
+    indices = np.arange(reps_lab.shape[0])
+    np.random.shuffle(indices)
+    reps_lab = reps_lab[indices]
+    reps_img = reps_img[indices]
+    reps_txt = reps_txt[indices]
+    
+    dist_method = None
+    if lay_img.rep_tied_eval_dist == deepnet_pb2.Layer.L2:
+      dist_method = 'L2'
+    elif lay_img.rep_tied_eval_dist == deepnet_pb2.Layer.COS:
+      dist_method = 'COS'
+      
+    k = self.net.hyperparams.map_k
+    n = self.net.hyperparams.map_n
+    
+    if self.net.hyperparams.label_type == deepnet_pb2.Hyperparams.ONEOFK:
+      a = fx_calc_map_label(reps_img, reps_txt, reps_lab, k, dist_method)
+      b = fx_calc_map_label(reps_txt, reps_img, reps_lab, k, dist_method)
+    elif self.net.hyperparams.label_type == deepnet_pb2.Hyperparams.MULTILABEL:
+      a = fx_calc_map_multilabel(reps_img, reps_txt, reps_lab, k, n, dist_method)
+      b = fx_calc_map_multilabel(reps_txt, reps_img, reps_lab, k, n, dist_method)
+    
+    print 
+    print a,b,(a+b)/2
+    if dataset == 'test':
+      self.restricted_testnum = (a+b)/2
+    elif dataset == 'validation':
+      self.restricted_validnum = (a+b)/2

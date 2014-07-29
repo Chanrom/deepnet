@@ -56,6 +56,7 @@ message Layer {
     KL = 3;
   }
   optional Dist rep_tied_dist = 24 [default=L2];
+  optional Dist rep_tied_eval_dist = 25 [default=COS];
 }
 
 message Parameter {
@@ -198,7 +199,12 @@ message Hyperparams {
     ONEOFK = 1;
     MULTILABEL = 2;
   }
-  optional LabelType label_type = 66 [default=NOLABEL];
+  optional LabelType label_type = 66 [default=ONEOFK];
+  optional bool alternative = 67 [default=false];
+  optional int32 alternative_size = 68 [default=0];
+  optional bool odd = 69 [default=false];
+  optional int32 map_k = 70 [default=50];
+  optional int32 map_n = 71 [default=5000];
 }
 
 message Edge {

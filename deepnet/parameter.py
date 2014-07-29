@@ -97,10 +97,23 @@ class Parameter(object):
     w_delta.add_mult(gradient)
 
     # Apply update.
-    w.add_mult(w_delta, -epsilon)
-    if not no_reg and h.apply_weight_norm:
-      w.norm_limit(h.weight_norm, axis=0)
-
+    # w.add_mult(w_delta, -epsilon)
+    # if not no_reg and h.apply_weight_norm:
+      # w.norm_limit(h.weight_norm, axis=0)
+    
+    if self.hyperparams.alternative is True:
+      if ( (step // self.hyperparams.alternative_size) % 2 == 1 and self.hyperparams.odd is True ) or \
+      ( (step // self.hyperparams.alternative_size) % 2 == 0 and self.hyperparams.odd is False ):
+        # Apply update.
+        w.add_mult(w_delta, -epsilon)
+        if not no_reg and h.apply_weight_norm:
+          w.norm_limit(h.weight_norm, axis=0)
+    else:
+      # Apply update.
+        w.add_mult(w_delta, -epsilon)
+        if not no_reg and h.apply_weight_norm:
+          w.norm_limit(h.weight_norm, axis=0)
+          
     # Reset.
     self.num_grads_received = 0
     gradient.assign(0)

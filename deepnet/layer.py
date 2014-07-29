@@ -16,6 +16,7 @@ class Layer(Parameter):
       self.rep_tied_to = proto.rep_tied_to
       self.rep_tied_lambda = proto.rep_tied_lambda
     self.rep_tied_dist = proto.rep_tied_dist
+    self.rep_tied_eval_dist = proto.rep_tied_eval_dist
     self.rep_tied_layers = []
     
     self.proto = proto
@@ -223,8 +224,31 @@ class Layer(Parameter):
       if h.sparsity:
         sparsity_gradient = self.GetSparsityGradient()
         self.suff_stats.add_mult(sparsity_gradient, -self.batchsize)
+      
+      self.suff_stats.mult(self.loss_factor)
+      if self.rep_tied:
+        if self.rep_tied_dist == deepnet_pb2.Layer.L1:
+          for rep_tied_layer in self.rep_tied_layers:
+            self.state.subtract(rep_tied_layer.state, target=self.temp_state)
+            self.temp_state.sign(target=self.temp_state)
+            self.deriv.assign(1)
+            self.ComputeDeriv()
+            self.temp_state.mult(self.deriv)
+            if self.replicated_neighbour is not None:
+              self.temp_state.mult_by_row(self.replicated_neighbour.NN)
+            self.suff_stats.add_sums(self.temp_state, axis=1, mult=-self.rep_tied_lambda)
+        elif self.rep_tied_dist == deepnet_pb2.Layer.L2:
+          for rep_tied_layer in self.rep_tied_layers:
+            self.state.subtract(rep_tied_layer.state, target=self.temp_state)
+            self.deriv.assign(1)
+            self.ComputeDeriv()
+            self.temp_state.mult(self.deriv)
+            if self.replicated_neighbour is not None:
+              self.temp_state.mult_by_row(self.replicated_neighbour.NN)
+            self.suff_stats.add_sums(self.temp_state, axis=1, mult=-self.rep_tied_lambda)
+        
     else:
-      self.suff_stats.add_sums(self.state, axis=1, mult=-1.0)
+      self.suff_stats.add_sums(self.state, axis=1, mult=-1.0*self.loss_factor)
     if not neg and h.sparsity:
       return self.means.sum()/self.means.shape[0]
 

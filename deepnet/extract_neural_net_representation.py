@@ -67,7 +67,7 @@ def main():
   layernames = sys.argv[5:]
   ExtractRepresentations(model_file, train_op_file, layernames, output_dir,
                          #memory='1G', datasets=['train', 'validation', 'test'])
-                         memory='1G', datasets=['validation', 'test'], data_proto=data_proto)
+                         memory='10G', datasets=['train', 'validation', 'test'], data_proto=data_proto)
   FreeGPU(board)
 
 

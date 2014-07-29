@@ -234,12 +234,34 @@ class Edge(Parameter):
       if h2.sparsity:
         self.node2.state.add_col_mult(self.node2.sparsity_gradient, -1)
       cm.dot(self.node1.state, self.node2.state.T, target=self.suff_stats)
+      
+      self.suff_stats.mult(self.node1.loss_factor)
+      
+      if self.node2.rep_tied:
+        if self.node2.rep_tied_dist == deepnet_pb2.Layer.L1:
+          for rep_tied_layer in self.node2.rep_tied_layers:
+            self.node2.state.subtract(rep_tied_layer.state, target=self.node2.temp_state)
+            self.node2.temp_state.sign(target=self.node2.temp_state)
+            self.node2.deriv.assign(1)
+            self.node2.ComputeDeriv()
+            self.node2.temp_state.mult(self.node2.deriv)
+            self.node2.temp_state.mult(self.proto.up_factor)
+            self.suff_stats.add_dot(self.node1.state, self.node2.temp_state.T, mult=-self.node2.rep_tied_lambda)
+        elif self.node2.rep_tied_dist == deepnet_pb2.Layer.L2:
+          for rep_tied_layer in self.node2.rep_tied_layers:
+            self.node2.state.subtract(rep_tied_layer.state, target=self.node2.temp_state)
+            self.node2.deriv.assign(1)
+            self.node2.ComputeDeriv()
+            self.node2.temp_state.mult(self.node2.deriv)
+            self.node2.temp_state.mult(self.proto.up_factor)
+            self.suff_stats.add_dot(self.node1.state, self.node2.temp_state.T, mult=-self.node2.rep_tied_lambda)
+        
       if h1.sparsity:
         self.node1.state.add_col_vec(self.node1.sparsity_gradient)
       if h2.sparsity:
         self.node2.state.add_col_vec(self.node2.sparsity_gradient)
     else:
-      self.suff_stats.add_dot(self.node1.state, self.node2.state.T, mult=-1.0)
+      self.suff_stats.add_dot(self.node1.state, self.node2.state.T, mult=-1.0*self.node1.loss_factor)
     if self.node1.activation == deepnet_pb2.Hyperparams.REPLICATED_SOFTMAX:
       self.node1.state.mult_by_row(self.node1.NN)
     if self.node2.activation == deepnet_pb2.Hyperparams.REPLICATED_SOFTMAX:

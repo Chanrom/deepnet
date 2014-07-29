@@ -21,7 +21,9 @@ from cos_layer import *
 from sin_layer import *
 from transfer_edge import *
 from soft_transfer_edge import *
-
+from fxeval import *
+from fx_util import *
+    
 class NeuralNet(object):
 
   def __init__(self, net, t_op=None, e_op=None):
@@ -262,11 +264,15 @@ class NeuralNet(object):
       cm.dot(edge.params['weight'], deriv, target=layer.deriv)
       layer.dirty = True
       if layer.rep_tied:
-        if layer.rep_tied_dist == deepnet_pb2.Layer.L2:
-          for rep_tied_layer in layer.rep_tied_layers:
+        for rep_tied_layer in layer.rep_tied_layers:
+          if layer.rep_tied_dist == deepnet_pb2.Layer.L2:
             layer.state.subtract(rep_tied_layer.state, target=layer.temp_state)
             layer.deriv.add_mult(layer.temp_state, layer.rep_tied_lambda)
-      
+          elif layer.rep_tied_dist == deepnet_pb2.Layer.L1:
+            layer.state.subtract(rep_tied_layer.state, target=layer.temp_state)
+            layer.temp_state.sign(target=layer.temp_state)
+            layer.deriv.add_mult(layer.temp_state, layer.rep_tied_lambda)
+          
   def UpdateEdgeParams(self, edge, deriv, step):
     """ Update the parameters associated with this edge.
 
@@ -427,9 +433,9 @@ class NeuralNet(object):
     if total_pos == 0:
       total_pos = 1e-10
     recall = cumsum / total_pos
-    ap = np.dot(prec, targets_sorted) / total_pos
     prec50 = prec[50]
     return ap, prec50
+    ap = np.dot(prec, targets_sorted) / total_pos
 
   def ComputeScore(self, preds, targets):
     """Computes Average precision and precision at 50."""
@@ -665,14 +671,12 @@ class NeuralNet(object):
         # Evaluate on validation set.
         self.Evaluate(validation=True, collect_predictions=collect_predictions)
         if select_model_using_restricted:
-          if self.net.hyperparams.label_type == deepnet_pb2.Hyperparams.ONEOFK:
-            self.CalcRestricted_OneOfK(dataset='validation')
+          self.CalcRestricted(dataset='validation')
           
         # Evaluate on test set.
         self.Evaluate(validation=False, collect_predictions=collect_predictions)
         if select_model_using_restricted:
-          if self.net.hyperparams.label_type == deepnet_pb2.Hyperparams.ONEOFK:
-            self.CalcRestricted_OneOfK(dataset='test')
+          self.CalcRestricted(dataset='test')
           
         if select_best:
           valid_stat = self.net.validation_stats[-1]
@@ -718,12 +722,14 @@ class NeuralNet(object):
             print 'Best valid acc : %.4f Test acc %.4f' % (1-best_valid_error, 1-test_error)
           elif select_model_using_map:
             print 'Best valid MAP : %.4f Test MAP %.4f' % (1-best_valid_error, 1-test_error)
+          elif select_model_using_restricted:
+            print 'Best valid MAP : %.4f Test MAP %.4f' % (1-best_valid_error, 1-test_error)
 
           util.WriteCheckpointFile(best_net, best_t_op, best=True)
 
       stop = self.TrainStopCondition(step)
 
-  def CalcRestricted_OneOfK(self, dataset='test', drop=False):
+  def CalcRestricted(self, dataset='test', drop=False):
     lay_img = self.GetLayerByName('image_tied_hidden')
     lay_txt = self.GetLayerByName('text_tied_hidden')
 
@@ -734,45 +740,51 @@ class NeuralNet(object):
       if self.train_data_handler is None:
         return
       numbatches = self.train_data_handler.num_batches
-      size = (numbatches - 1) * self.train_data_handler.batchsize
+      size = numbatches * self.train_data_handler.batchsize
       batch_size = self.train_data_handler.batchsize
     elif dataset == 'validation':
       datagetter = self.GetValidationBatch
       if self.validation_data_handler is None:
         return
       numbatches = self.validation_data_handler.num_batches
-      size = (numbatches - 1) * self.validation_data_handler.batchsize
+      size = numbatches * self.validation_data_handler.batchsize
       batch_size = self.validation_data_handler.batchsize
     elif dataset == 'test':
       datagetter = self.GetTestBatch
       if self.test_data_handler is None:
         return
       numbatches = self.test_data_handler.num_batches
-      size = (numbatches - 1) * self.test_data_handler.batchsize
+      size = numbatches * self.test_data_handler.batchsize
       batch_size = self.test_data_handler.batchsize
 
     reps_img = np.zeros((size, lay_img.dimensions))
     reps_txt = np.zeros((size, lay_txt.dimensions))
-   
-    reps_lab = np.zeros((size))
+    
+    reps_lab = np.zeros((size, lay_lab.dimensions))
     for batch in range(numbatches):
       datagetter()
       self.ForwardPropagate(train=drop)
-      if batch < numbatches - 1:
-        s = batch * batch_size
-        reps_img[s:s+batch_size,:] = lay_img.state.asarray().T
-        reps_txt[s:s+batch_size,:] = lay_txt.state.asarray().T
-        reps_lab[s:s+batch_size] = lay_lab.data.asarray()
-      else:
-        reps_img = np.r_[reps_img, lay_img.state.asarray().T]
-        reps_txt = np.r_[reps_txt, lay_txt.state.asarray().T]
-        reps_lab = np.r_[reps_lab, lay_lab.data.asarray().reshape(-1)]
+      s = batch * batch_size
+      reps_img[s:s+batch_size,:] = lay_img.state.asarray().T
+      reps_txt[s:s+batch_size,:] = lay_txt.state.asarray().T
+      reps_lab[s:s+batch_size,:] = lay_lab.data.asarray().T
+      
+    dist_method = None
+    if lay_img.rep_tied_eval_dist == deepnet_pb2.Layer.L2:
+      dist_method = 'L2'
+    elif lay_img.rep_tied_eval_dist == deepnet_pb2.Layer.COS:
+      dist_method = 'COS'
 
-    dist_method = 'COS'
-
-    import fxeval
-    a = fxeval.fx_calc_map_label_k(reps_img, reps_txt, reps_lab, 50, dist_method)
-    b = fxeval.fx_calc_map_label_k(reps_txt, reps_img, reps_lab, 50, dist_method)
+    k = self.net.hyperparams.map_k
+    n = self.net.hyperparams.map_n
+    
+    if self.net.hyperparams.label_type == deepnet_pb2.Hyperparams.ONEOFK:
+      a = fx_calc_map_label(reps_img, reps_txt, reps_lab, k, dist_method)
+      b = fx_calc_map_label(reps_txt, reps_img, reps_lab, k, dist_method)
+    elif self.net.hyperparams.label_type == deepnet_pb2.Hyperparams.MULTILABEL:
+      a = fx_calc_map_multilabel(reps_img, reps_txt, reps_lab, k, n, dist_method)
+      b = fx_calc_map_multilabel(reps_txt, reps_img, reps_lab, k, n, dist_method)
+    
     print 
     print a,b,(a+b)/2
     if dataset == 'test':
