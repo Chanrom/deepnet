@@ -40,6 +40,8 @@ University of Toronto.
   - Add the path to DeepNet to PYTHONPATH. For example, if DeepNet is located in the
     home dir,
       export PYTHONPATH=$PYTHONPATH:$HOME/deepnet
+  - Add the deepnet
+      export deepnet=$HOME/deepnet/deepnet
 
 (4) RUN EXAMPLES
   - Download and extract the MNIST dataset from http://www.cs.toronto.edu/~nitish/deepnet/mnist.tar.gz
