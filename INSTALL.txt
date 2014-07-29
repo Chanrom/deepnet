@@ -55,6 +55,9 @@ University of Toronto.
     $ ./runall.sh
     This should start training an RBM model.
   
+(5) RUN MM 2014
+  See deepnet/examples/mm14.
+  
 DeepNet has been tested on Ubuntu 12.04 using CUDA 4.2 and 5.0 on a variety of NVIDIA
 GPUs (GTX-280, GTX-580, GTX-690, M2090, K-20x).
 
