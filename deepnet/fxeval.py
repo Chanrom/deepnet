@@ -48,29 +48,69 @@ def fx_calc_map_label_k_dist(dist, label, k = 0, dist_method='L2'):
       res += [0]
   return np.mean(res)
   
-def fx_calc_map_multilabel(image, text, label, k=0, n=1000, dist_method='L2'):
-  image = image[:n,:]
+def computePrecAndRecall(result):
+  """
+  compute precision and recall for all position
+  """
+  cumsum=result.cumsum(axis=1)
+  prec=cumsum / np.arange(1.0,1+result.shape[1])
+  total_relevant=cumsum[:,-1]+1e-5
+  recall=cumsum / total_relevant[:,np.newaxis]
+  return prec,recall
+    
+def fx_calc_map_multilabel(image, text, label, k=0, n=0, dist_method='L2'):
+  if n > 0:
+    image = image[:n,:]
+  else:
+    n = image.shape[0]
+    
   if dist_method == 'L2':
     dist = scipy.spatial.distance.cdist(image, text, 'euclidean')
   elif dist_method == 'COS':
     dist = scipy.spatial.distance.cdist(image, text, 'cosine')
+  elif dist_method == 'L1':
+    dist = scipy.spatial.distance.cdist(image, text, 'minkowski', 1)
+  
   ord = dist.argsort()
-  numcases = dist.shape[0]
-  if k == 0:
-    k = numcases
-  # print k
-  res = []
-  for i in range(numcases):
-    order = ord[i].reshape(-1)
 
-    tmp_label = (np.dot(label[order], label[i]) > 0)
-    if tmp_label.sum() > 0:
-      prec = tmp_label.cumsum() / np.arange(1.0, 1 + tmp_label.shape[0])
-      total_pos = float(tmp_label.sum())
-      if total_pos > 0:
-        res += [np.dot(tmp_label, prec) / total_pos]
-      
-  return np.mean(res)
+  dist_label = (np.dot(label[:n,:], label.T) > 0)
+  result = np.zeros(dist_label.shape)
+  for i in xrange(n):
+    result[i]=dist_label[i][ord[i]]
+  
+  if k > 0:
+    result = result[:,:k]
+  
+  total_relevant=np.sum(result, axis=1)+1e-5
+  prec,_=computePrecAndRecall(result)
+  ap=np.sum((prec*result),axis=1)/total_relevant
+  return np.mean(ap)
+  
+def fx_calc_map_multilabel_pr(image, text, label, k=0, n=0, dist_method='L2'):
+  if n > 0:
+    image = image[:n,:]
+  else:
+    n = image.shape[0]
+    
+  if dist_method == 'L2':
+    dist = scipy.spatial.distance.cdist(image, text, 'euclidean')
+  elif dist_method == 'COS':
+    dist = scipy.spatial.distance.cdist(image, text, 'cosine')
+  elif dist_method == 'L1':
+    dist = scipy.spatial.distance.cdist(image, text, 'minkowski', 1)
+  
+  ord = dist.argsort()
+
+  dist_label = (np.dot(label[:n,:], label.T) > 0)
+  result = np.zeros(dist_label.shape)
+  for i in xrange(n):
+    result[i]=dist_label[i][ord[i]]
+  
+  if k > 0:
+    result = result[:,:k]
+  
+  prec,recall=computePrecAndRecall(result)
+  return prec,recall
   
 def fx_calc_map_multilabel_k(image, text, label, k=0, dist_method='L2'):
   if dist_method == 'L2':

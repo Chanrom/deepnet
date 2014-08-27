@@ -284,6 +284,7 @@ message Operation {
   optional bool get_last_piece = 17 [default=false];
   optional string data_proto_prefix = 18;
   optional string checkpoint_prefix = 19;
+  optional int32 gpu_no = 20 [default=2];
 }
 
 message Metrics {

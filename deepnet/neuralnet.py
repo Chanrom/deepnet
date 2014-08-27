@@ -791,4 +791,94 @@ class NeuralNet(object):
       self.restricted_testnum = (a+b)/2
     elif dataset == 'validation':
       self.restricted_validnum = (a+b)/2
+  
+  def CalcRestricted2(self, dataset='test', drop=False):
+    lay_img = self.GetLayerByName('image_tied_hidden')
+    lay_txt = self.GetLayerByName('text_tied_hidden')
+
+    lay_lab = self.GetLayerByName('label_layer')
+    
+    lay_img_inp = self.GetLayerByName('image_hidden2')
+    lay_img2txt = self.GetLayerByName('cross_text_hidden2_recon')
+    
+    lay_txt_inp = self.GetLayerByName('text_hidden2')
+    lay_txt2img = self.GetLayerByName('cross_image_hidden2_recon')
+    
+    if dataset == 'train':
+      datagetter = self.GetTrainBatch
+      if self.train_data_handler is None:
+        return
+      numbatches = self.train_data_handler.num_batches
+      size = numbatches * self.train_data_handler.batchsize
+      batch_size = self.train_data_handler.batchsize
+    elif dataset == 'validation':
+      datagetter = self.GetValidationBatch
+      if self.validation_data_handler is None:
+        return
+      numbatches = self.validation_data_handler.num_batches
+      size = numbatches * self.validation_data_handler.batchsize
+      batch_size = self.validation_data_handler.batchsize
+    elif dataset == 'test':
+      datagetter = self.GetTestBatch
+      if self.test_data_handler is None:
+        return
+      numbatches = self.test_data_handler.num_batches
+      size = numbatches * self.test_data_handler.batchsize
+      batch_size = self.test_data_handler.batchsize
+
+    reps_img = np.zeros((size, lay_img.dimensions))
+    reps_txt = np.zeros((size, lay_txt.dimensions))
+    inp_img = np.zeros((size, lay_img_inp.dimensions))
+    inp_txt = np.zeros((size, lay_txt_inp.dimensions))
+    img2txt = np.zeros((size, lay_img2txt.dimensions))
+    txt2img = np.zeros((size, lay_txt2img.dimensions))
+    
+    reps_lab = np.zeros((size, lay_lab.dimensions))
+    for batch in range(numbatches):
+      datagetter()
+      self.ForwardPropagate(train=drop)
+      s = batch * batch_size
+      reps_img[s:s+batch_size,:] = lay_img.state.asarray().T
+      reps_txt[s:s+batch_size,:] = lay_txt.state.asarray().T
+      reps_lab[s:s+batch_size,:] = lay_lab.data.asarray().T
+      inp_img[s:s+batch_size,:] = lay_img_inp.state.asarray().T
+      inp_txt[s:s+batch_size,:] = lay_txt_inp.state.asarray().T
+      img2txt[s:s+batch_size,:] = lay_img2txt.state.asarray().T
+      txt2img[s:s+batch_size,:] = lay_txt2img.state.asarray().T
       
+    dist_method = 'COS'
+    alpha = lay_img.rep_tied_lambda
+    
+    reps_img = np.c_[alpha*reps_img, (1-alpha)*inp_img, (1-alpha)*img2txt]
+    reps_txt = np.c_[alpha*reps_txt, (1-alpha)*txt2img, (1-alpha)*inp_txt]
+    
+    # dist1 = -alpha*fx_cos_distant(reps_img,reps_txt)
+    # dist1 += -(1-alpha)*fx_cos_distant(inp_img,txt2img)
+    # dist1 += -(1-alpha)*fx_cos_distant(img2txt,inp_txt)
+    
+    # dist2 = -alpha*fx_cos_distant(reps_txt,reps_img)
+    # dist2 += -(1-alpha)*fx_cos_distant(txt2img,inp_img)
+    # dist2 += -(1-alpha)*fx_cos_distant(inp_txt,img2txt)
+    
+    # reps_img = np.c_[inp_img, img2txt]
+    # reps_txt = np.c_[txt2img, inp_txt]
+    
+    # reps_img = np.c_[inp_img, img2txt]
+    # reps_txt = np.c_[txt2img, inp_txt]
+    
+    
+    if self.net.hyperparams.label_type == deepnet_pb2.Hyperparams.ONEOFK:
+      # a = fx_calc_map_label_k(reps_img, reps_txt, reps_lab, 50, dist_method)
+      # b = fx_calc_map_label_k(reps_txt, reps_img, reps_lab, 50, dist_method)
+      a = fx_calc_map_label_k_dist(dist1, reps_lab, 50, dist_method)
+      b = fx_calc_map_label_k_dist(dist2, reps_lab, 50, dist_method)
+    elif self.net.hyperparams.label_type == deepnet_pb2.Hyperparams.MULTILABEL:
+      a = fx_calc_map_multilabel_k(reps_img, reps_txt, reps_lab, 50, dist_method)
+      b = fx_calc_map_multilabel_k(reps_txt, reps_img, reps_lab, 50, dist_method)
+    
+    print 
+    print a,b,(a+b)/2
+    if dataset == 'test':
+      self.restricted_testnum = (a+b)/2
+    elif dataset == 'validation':
+      self.restricted_validnum = (a+b)/2

@@ -53,7 +53,6 @@ def ExtractRepresentations(model_file, train_op_file, layernames,
     text_format.PrintMessage(data_pb, f)
 
 def main():
-  board = LockGPU()
   model_file = sys.argv[1]
   train_op_file = sys.argv[2]
   layernames = sys.argv[3].split(',')
@@ -70,7 +69,12 @@ def main():
     main_mem = sys.argv[6]
   if len(sys.argv) > 7:
     data_proto = sys.argv[7]
-
+  
+  train_op = util.ReadOperation(train_op_file)
+  
+  board = train_op.gpu_no
+  board = LockGPU(board=board)
+  
   ExtractRepresentations(model_file, train_op_file, layernames, output_dir,
                          datasets=datasets, gpu_mem=gpu_mem, main_mem=main_mem,
                          data_proto=data_proto)

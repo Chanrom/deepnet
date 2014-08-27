@@ -246,6 +246,18 @@ class Layer(Parameter):
             if self.replicated_neighbour is not None:
               self.temp_state.mult_by_row(self.replicated_neighbour.NN)
             self.suff_stats.add_sums(self.temp_state, axis=1, mult=-self.rep_tied_lambda)
+        elif self.rep_tied_dist == deepnet_pb2.Layer.KL:
+          for rep_tied_layer in self.rep_tied_layers:
+            th1 = self.state.asarray()
+            th2 = rep_tied_layer.state.asarray()
+            grd = np.log(th1*(1-th2)/(th2*(1-th1)+self.tiny)+self.tiny)+(th1-th2)/(th1*(1-th1)+self.tiny)
+            self.temp_state = cm.CUDAMatrix(grd)
+            self.deriv.assign(1)
+            self.ComputeDeriv()
+            self.temp_state.mult(self.deriv)
+            if self.replicated_neighbour is not None:
+              self.temp_state.mult_by_row(self.replicated_neighbour.NN)
+            self.suff_stats.add_sums(self.temp_state, axis=1, mult=-self.rep_tied_lambda)
         
     else:
       self.suff_stats.add_sums(self.state, axis=1, mult=-1.0*self.loss_factor)

@@ -51,12 +51,12 @@ def ExtractRepresentations(model_file, train_op_file, layernames,
 
 def Usage():
   print 'python %s <model_file> <train_op_file> <output_dir> <> <layer name1> [layer name2 [..]]' % sys.argv[0]
-
+  
 def main():
   if len(sys.argv) < 6:
     Usage()
     sys.exit(0)
-  board = LockGPU()
+  # board = LockGPU()
   model_file = sys.argv[1]
   model = util.ReadModel(model_file)
   train_op_file = sys.argv[2]
@@ -65,6 +65,10 @@ def main():
   if data_proto == "None":
     data_proto = None
   layernames = sys.argv[5:]
+  train_op = util.ReadOperation(train_op_file)
+  board = train_op.gpu_no
+  board = LockGPU(board=board)
+  
   ExtractRepresentations(model_file, train_op_file, layernames, output_dir,
                          #memory='1G', datasets=['train', 'validation', 'test'])
                          memory='10G', datasets=['train', 'validation', 'test'], data_proto=data_proto)

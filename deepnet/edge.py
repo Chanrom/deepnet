@@ -43,6 +43,7 @@ class Edge(Parameter):
     if self.conv or self.local:
       self.conv_filter_fig = visualize.GetFigId()
     self.AllocateMemory()
+    self.tiny = 1e-10
 
   def Show(self):
     if not self.hyperparams.enable_display:
@@ -250,6 +251,17 @@ class Edge(Parameter):
         elif self.node2.rep_tied_dist == deepnet_pb2.Layer.L2:
           for rep_tied_layer in self.node2.rep_tied_layers:
             self.node2.state.subtract(rep_tied_layer.state, target=self.node2.temp_state)
+            self.node2.deriv.assign(1)
+            self.node2.ComputeDeriv()
+            self.node2.temp_state.mult(self.node2.deriv)
+            self.node2.temp_state.mult(self.proto.up_factor)
+            self.suff_stats.add_dot(self.node1.state, self.node2.temp_state.T, mult=-self.node2.rep_tied_lambda)
+        elif self.node2.rep_tied_dist == deepnet_pb2.Layer.KL:
+          for rep_tied_layer in self.node2.rep_tied_layers:
+            th1 = self.node2.state.asarray()
+            th2 = rep_tied_layer.state.asarray()
+            grd = np.log(th1*(1-th2)/(th2*(1-th1)+self.tiny)+self.tiny)+(th1-th2)/(th1*(1-th1)+self.tiny)
+            self.node2.temp_state = cm.CUDAMatrix(grd)
             self.node2.deriv.assign(1)
             self.node2.ComputeDeriv()
             self.node2.temp_state.mult(self.node2.deriv)

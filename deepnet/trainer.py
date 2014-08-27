@@ -7,23 +7,25 @@ from choose_matrix_library import *
 import numpy as np
 from time import sleep
 
-def LockGPU(max_retries=10):
-  for retry_count in range(max_retries):
-    board = gpu_lock.obtain_lock_id()
-    if board != -1:
-      break
-    sleep(1)
-  if board == -1:
-    print 'No GPU board available.'
-    sys.exit(1)
-  else:
-    cm.cuda_set_device(board)
-    cm.cublas_init()
-  return board
-  # board = 2
-  # cm.cuda_set_device(board)
-  # cm.cublas_init()
+def LockGPU(max_retries=10,board=None):
+  # for retry_count in range(max_retries):
+    # board = gpu_lock.obtain_lock_id()
+    # if board != -1:
+      # break
+    # sleep(1)
+  # if board == -1:
+    # print 'No GPU board available.'
+    # sys.exit(1)
+  # else:
+    # cm.cuda_set_device(board)
+    # cm.cublas_init()
   # return board
+  if board is None:
+    board = 2
+
+  cm.cuda_set_device(board)
+  cm.cublas_init()
+  return board
 
 def FreeGPU(board):
   cm.cublas_shutdown()
@@ -50,10 +52,13 @@ def CreateDeepnet(model, train_op, eval_op):
     raise Exception('Model not implemented.')
 
 def main():
-  if use_gpu == 'yes':
-    board = LockGPU()
+  # if use_gpu == 'yes':
+    # board = LockGPU()
   model, train_op, eval_op = LoadExperiment(sys.argv[1], sys.argv[2],
                                             sys.argv[3])
+  board = train_op.gpu_no
+  if use_gpu == 'yes':
+    board = LockGPU(board=board)
   model = CreateDeepnet(model, train_op, eval_op)
   model.Train()
   if use_gpu == 'yes':

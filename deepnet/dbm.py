@@ -554,12 +554,6 @@ class DBM(NeuralNet):
       reps_txt[s:s+batch_size,:] = lay_txt.state.asarray().T
       reps_lab[s:s+batch_size,:] = lay_lab.data.asarray().T
       
-    indices = np.arange(reps_lab.shape[0])
-    np.random.shuffle(indices)
-    reps_lab = reps_lab[indices]
-    reps_img = reps_img[indices]
-    reps_txt = reps_txt[indices]
-    
     dist_method = None
     if lay_img.rep_tied_eval_dist == deepnet_pb2.Layer.L2:
       dist_method = 'L2'
